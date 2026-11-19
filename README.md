@@ -4,7 +4,7 @@ Sistem apotek online + offline untuk Apotek Glory Farma (Jember), pengganti prog
 
 | Folder | Isi | Fase |
 | --- | --- | --- |
-| `db/` | Skema PostgreSQL, migrasi data iAbu, validasi 23 cek | selesai |
+| `db/` | Skema PostgreSQL, migrasi pertama + impor ulang data iAbu, validasi 23 cek | selesai |
 | `shared/` | Kode bersama server dan kasir (kontrak API, uang, FIFO) | 1 |
 | `server/` | API Go (chi, pgx, sqlc), CLI, laporan | 1 |
 | `cashier/` | Aplikasi kasir Wails + SQLite | 2 |

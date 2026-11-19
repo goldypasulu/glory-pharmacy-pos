@@ -43,12 +43,14 @@ Cara pakai:
   `GET /readyz` (ping DB); penulis error sesuai `docs/API_CONTRACT.md` bagian 3.
 - `db/apply-migrations.sh`: membuat `schema_migrations(version text primary key, applied_at timestamptz)`, menerapkan
   `db/migrations/*.sql` yang belum tercatat, berurutan, masing-masing dalam satu transaksi. `db/migrate.sh` memanggilnya
-  setelah `schema.sql` dan sebelum `migrate.sql`.
+  setelah `schema.sql` dan sebelum `migrate.sql`; `db/reimport.sh` memanggilnya sebelum `reimport.sql` (database lama
+  mungkin belum punya migrasi terbaru).
 - `deploy/docker-compose.dev.yml`: PostgreSQL 16 untuk tes di port `55432`, data di `tmpfs`, `TZ=Asia/Jakarta`.
 - `server/internal/testdb`: `testdb.New(t)` membuat database baru `TEMPLATE glorypos_template` dan menghapusnya saat
   `t.Cleanup`. Bila `TEST_DATABASE_URL` kosong, tes **gagal** dengan pesan jelas (bukan skip).
 - `Makefile`: `fmt`, `vet`, `sqlc`, `test`, `test-db` (naikkan compose dev + buat template dari schema.sql + migrations),
-  `check` (= gofmt -l kosong + vet + `sqlc diff` + test), `run`, `migrate-legacy LEGACY_DUMP=...`.
+  `check` (= gofmt -l kosong + vet + `sqlc diff` + test), `run`, `migrate-legacy LEGACY_DUMP=...`,
+  `reimport-legacy LEGACY_DUMP=...`.
 
 **Di luar lingkup:** endpoint bisnis, auth, Dockerfile produksi.
 
@@ -59,6 +61,7 @@ Cara pakai:
 - [ ] Tes: handler yang panic menghasilkan 500 berformat error kontrak dengan `request_id`, server tetap hidup.
 - [ ] Tes: `testdb.New` menghasilkan database berisi semua tabel `schema.sql` + migrations, terisolasi antar tes paralel.
 - [ ] `make migrate-legacy LEGACY_DUMP=<backup>` tetap lolos 23/23 cek dan mencatat versi di `schema_migrations`.
+- [ ] `make reimport-legacy LEGACY_DUMP=<backup yang sama>` lolos 23/23 dan ringkasannya menunjukkan selisih 0.
 
 ---
 

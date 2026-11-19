@@ -3,11 +3,19 @@
 | File | Isi |
 | --- | --- |
 | `schema.sql` | Skema PostgreSQL 16: 32 tabel + 8 view laporan, multi-outlet, siap sync offline (watermark xid8) |
-| `migrate.sql` | Salin data dari schema `legacy` (backup iAbu) ke skema baru; idempotent (UUID deterministik) |
+| `migrate.sh` + `migrate.sql` | **Migrasi pertama** ke database kosong: restore -> skema -> data -> validasi |
+| `reimport.sh` + `reimport.sql` | **Impor ulang** backup iAbu terbaru ke database Glory POS yang sudah jalan (masa uji) |
 | `validate.sql` | 23 cek angka legacy vs baru + ringkasan laba, ED, kualitas data |
-| `migrate.sh` | Menjalankan semuanya: restore → skema → migrasi → validasi |
+| `legacy/helpers.sql` | Fungsi bantu (id deterministik, WIB, pembersihan ED) |
+| `legacy/master.sql` | Outlet, user, referensi, barang, satuan, harga, racikan (upsert) |
+| `legacy/transactions.sql` | Pembelian, batch, penjualan, opname, kartu stok, piutang (dibangun ulang) |
+| `legacy/seed.sql` | Pengaturan awal dan kategori biaya (hanya migrasi pertama) |
+| `legacy/guard.sql` | Pengaman impor ulang |
 
-## Menjalankan
+`migrate.sql` dan `reimport.sql` memakai file `legacy/*.sql` yang sama, jadi hasil migrasi pertama dan
+impor ulang tidak pernah berbeda logika.
+
+## Migrasi pertama
 
 ```bash
 # butuh PostgreSQL 15+ (NULLS NOT DISTINCT; diuji di 16), user dengan hak CREATEDB
@@ -15,10 +23,45 @@ export PGHOST=localhost PGUSER=postgres PGPASSWORD=...
 DB=glory_pos ./migrate.sh /path/GLORY_161126.iAbu
 ```
 
-Database tujuan **dihapus dan dibuat ulang** setiap kali dijalankan.
+Database tujuan **dihapus dan dibuat ulang**. Pakai hanya untuk database baru.
 Schema `legacy` dibiarkan untuk audit; pakai `KEEP_LEGACY=0` untuk menghapusnya.
-
 Hasil pada backup 16 Nov 2026: 23/23 cek OK, waktu proses ±15 detik.
+
+## Impor ulang selama masa uji
+
+Selama iAbu masih dipakai berjualan dan Glory POS dipakai memantau / mencoba, masukkan backup iAbu terbaru
+tanpa menghapus database:
+
+```bash
+DB=glory_pos BACKUP_DIR=/srv/glorypos-backups ./reimport.sh /path/GLORY_terbaru.iAbu
+```
+
+| Diperbarui dari iAbu | Tidak disentuh (milik Glory POS) |
+| --- | --- |
+| Barang, satuan, harga umum, racikan, supplier/pelanggan (kolom asal iAbu) | Password, PIN, peran user; perangkat kasir; outlet dan pengaturan |
+| Barang/user/satuan baru dari iAbu | Barcode, golongan obat, zat aktif, flag resep |
+| Semua penjualan, retur, pembelian, opname, pembayaran piutang | Harga khusus per outlet / level harga lain |
+| Stok, batch, ED, HPP | Biaya operasional, data referensi buatan Glory |
+
+- Sebelum mengubah apa pun, database disalin ke `BACKUP_DIR` (`pg_dump -Fc`). Pulihkan dengan
+  `pg_restore --clean --if-exists -d glory_pos <file.dump>`. `SKIP_BACKUP=1` untuk melewatinya.
+- Satu transaksi: gagal di tengah = tidak ada yang berubah.
+- Baris yang nilainya sama tidak disentuh, jadi kasir hanya menarik yang benar-benar berubah.
+- **Ditolak** (dengan pesan dan saran) bila:
+  - sudah ada transaksi yang dibuat di Glory POS (penjualan, pembelian, opname, mutasi, transfer);
+  - backup lebih lama dari data yang sudah ada (`ALLOW_OLDER=1` bila memang sengaja);
+  - kode barang, kode supplier/pelanggan, username, atau nama satuan/jenis/kategori/merek dibuat di
+    Glory POS dan juga ada di iAbu;
+  - satuan atau harga umum dibuat di Glory POS untuk barang asal iAbu.
+- Aturan masa uji: **data master baru dan transaksi dibuat di iAbu**. Di Glory POS boleh mengisi
+  barcode, golongan obat, zat aktif, flag resep, harga khusus outlet, user, perangkat, pengaturan, biaya.
+  Uji coba transaksi Glory POS dilakukan di database terpisah.
+- Saat go-live: impor ulang terakhir dari backup iAbu terakhir, iAbu dimatikan, lalu Glory POS dipakai sendiri.
+  Setelah ada transaksi Glory POS, `reimport.sh` otomatis menolak berjalan.
+
+Diuji pada data asli (backup dipotong per 31 Okt lalu diimpor ulang dengan backup 16 Nov): +455 nota,
++41 faktur, +1 barang, +262 batch; 16 tabel data iAbu identik dengan migrasi segar dari backup 16 Nov;
+9 jenis isian Glory POS utuh; impor ulang backup yang sama tidak mengubah satu baris pun.
 
 ## Aturan migrasi penting
 

@@ -14,7 +14,8 @@ Baca file ini sebelum menulis kode. Detail lain ada di file berikut; buka hanya 
 
 ```
 go.work            use ./shared ./server ./cashier
-db/                schema.sql (baseline), migrate.sql/.sh (iAbu -> baru), validate.sql, migrations/ (perubahan berikutnya)
+db/                schema.sql (baseline), migrate.sh (migrasi pertama), reimport.sh (impor ulang iAbu masa uji),
+                   legacy/*.sql (logika migrasi bersama), validate.sql, migrations/ (perubahan skema berikutnya)
 shared/            module glorypos/shared  - kode tanpa I/O: tipe kontrak API, uang/qty, engine FIFO, format nomor nota
 server/            module glorypos/server  - API chi + pgx + sqlc, CLI, laporan PDF/XLSX, menyajikan web/dist
 cashier/           module glorypos/cashier - Wails v2 + SQLite (Fase 2)
@@ -66,8 +67,10 @@ Jangan menambah atau mengganti dependensi di luar daftar ini tanpa bertanya dulu
    bulan, dibuat di perangkat. Nomor tidak pernah dipakai ulang (unique penuh, termasuk dokumen void).
 7. **Skema:** `db/schema.sql` adalah baseline dan tidak diedit lagi. Perubahan skema = file baru
    `db/migrations/NNNNN_deskripsi.sql` (mulai 00002), SQL murni, satu transaksi. `sqlc.yaml` membaca
-   baseline + folder migrations. Jangan menyentuh `db/migrate.sql` kecuali task-nya tentang migrasi iAbu,
-   dan setelah itu `db/migrate.sh` wajib tetap lolos 23/23 cek.
+   baseline + folder migrations. Jangan menyentuh `db/migrate.sql`, `db/reimport.sql`, atau `db/legacy/*.sql`
+   kecuali task-nya tentang migrasi iAbu. Migrasi skema yang mengubah tabel yang diisi `db/legacy/*.sql`
+   (mis. kolom NOT NULL baru) wajib ikut menyesuaikan file itu, lalu `make migrate-legacy` dan
+   `make reimport-legacy` keduanya tetap lolos 23/23 cek.
 8. **Data apotek tidak masuk repo.** Jangan commit file `.iAbu`, hasil `pg_dump`, atau CSV data nyata.
    Tes memakai fixture sintetis.
 
@@ -124,7 +127,8 @@ Jangan anggap task selesai sebelum semua perintah yang relevan lulus tanpa error
 ```bash
 make check        # = gofmt -l (harus kosong) + go vet + sqlc diff + go test -count=1 untuk shared dan server
 make test-db      # menyalakan PostgreSQL tes di docker (port 55432) dan menyiapkan database template
-make migrate-legacy LEGACY_DUMP=/path/backup.iAbu   # opsional: migrasi iAbu + validasi 23 cek
+make migrate-legacy LEGACY_DUMP=/path/backup.iAbu   # opsional: migrasi iAbu pertama + validasi 23 cek
+make reimport-legacy LEGACY_DUMP=/path/backup.iAbu  # opsional: impor ulang ke DB yang sudah ada + validasi
 cd cashier && wails build -platform windows/amd64    # mulai Fase 2
 cd web && npm ci && npm run build                    # mulai Fase 3
 ```

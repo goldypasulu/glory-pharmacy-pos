@@ -8,11 +8,11 @@
 WITH checks(no, cek, legacy_value, new_value) AS (
   VALUES
   (1,  'Jumlah barang',
-       (SELECT count(*) FROM legacy.tbl_item)::numeric,          (SELECT count(*) FROM items)::numeric),
+       (SELECT count(*) FROM legacy.tbl_item)::numeric,          (SELECT count(*) FROM items WHERE legacy_ref IN (SELECT kodeitem FROM legacy.tbl_item))::numeric),
   (2,  'Jumlah supplier/pelanggan/dokter/sales',
-       (SELECT count(*) FROM legacy.tbl_supel),                  (SELECT count(*) FROM partners)),
+       (SELECT count(*) FROM legacy.tbl_supel),                  (SELECT count(*) FROM partners WHERE legacy_ref IN (SELECT kode FROM legacy.tbl_supel))),
   (3,  'Satuan barang (unik per barang+satuan)',
-       (SELECT count(DISTINCT (kodeitem, upper(btrim(satuan)))) FROM legacy.tbl_itemsatuanjml),          (SELECT count(*) FROM item_units WHERE legacy_ref IS NOT NULL)),
+       (SELECT count(DISTINCT (kodeitem, upper(btrim(satuan)))) FROM legacy.tbl_itemsatuanjml),          (SELECT count(*) FROM item_units WHERE legacy_ref IS NOT NULL AND deleted_at IS NULL)),
   (4,  'Jumlah transaksi penjualan (KSR+JL+RJ)',
        (SELECT count(*) FROM legacy.tbl_ikhd),                   (SELECT count(*) FROM sales)),
   (5,  'Jumlah baris penjualan',
@@ -40,7 +40,7 @@ WITH checks(no, cek, legacy_value, new_value) AS (
   (14, 'Total nilai pembelian',
        (SELECT sum(totalakhir) FROM legacy.tbl_imhd WHERE tipe='BL'), (SELECT sum(total) FROM purchases)),
   (15, 'Jumlah batch stok',
-       (SELECT count(*) FROM legacy.tbl_item_im),                (SELECT count(*) FROM stock_batches)),
+       (SELECT count(*) FROM legacy.tbl_item_im),                (SELECT count(*) FROM stock_batches WHERE deleted_at IS NULL)),
   (16, 'Jumlah mutasi stok (masuk+keluar+retur)',
        (SELECT count(*) FROM legacy.tbl_item_im) + (SELECT count(*) FROM legacy.tbl_item_ik)
          + (SELECT count(*) FROM legacy.tbl_item_ikret),         (SELECT count(*) FROM stock_movements)),
