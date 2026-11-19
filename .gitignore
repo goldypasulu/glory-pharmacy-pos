@@ -1,0 +1,22 @@
+# Data apotek nyata tidak boleh masuk repo
+*.iAbu
+*.dump
+*.backup
+*.sql.gz
+/backups/
+
+# Rahasia
+.env
+.env.*
+!.env.example
+
+# Build
+/server/internal/webui/dist/
+/web/node_modules/
+/web/dist/
+/cashier/build/bin/
+/cashier/frontend/node_modules/
+/cashier/frontend/dist/
+/bin/
+coverage.out
+*.test
