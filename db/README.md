@@ -11,9 +11,26 @@
 | `legacy/transactions.sql` | Pembelian, batch, penjualan, opname, kartu stok, piutang (dibangun ulang) |
 | `legacy/seed.sql` | Pengaturan awal dan kategori biaya (hanya migrasi pertama) |
 | `legacy/guard.sql` | Pengaman impor ulang |
+| `apply-migrations.sh` | Runner perubahan skema: `00001_baseline` (= `schema.sql`) + `migrations/*.sql`, dicatat di `schema_migrations` |
+| `migrations/` | Perubahan skema setelah baseline, mulai `00002_...sql` (aturan di `migrations/README.md`) |
 
 `migrate.sql` dan `reimport.sql` memakai file `legacy/*.sql` yang sama, jadi hasil migrasi pertama dan
 impor ulang tidak pernah berbeda logika.
+
+## Versi skema (`schema_migrations`)
+
+`apply-migrations.sh` membuat tabel `schema_migrations(version, applied_at)` lalu:
+
+- `00001_baseline`: bila database kosong, menerapkan `schema.sql`; bila tabel Glory POS sudah ada (database dibuat
+  sebelum runner ini ada, atau oleh `migrate.sh`), hanya mencatat versinya.
+- `migrations/NNNNN_*.sql` yang belum tercatat, berurutan, masing-masing satu transaksi bersama pencatatan versinya.
+
+Dipanggil oleh `migrate.sh` (setelah `schema.sql`, sebelum `migrate.sql`), `reimport.sh` (sebelum `reimport.sql`),
+dan `make test-db` (database template tes). Aman dijalankan berulang.
+
+**sqlc** membaca `schema.sql` + `migrations/` secara langsung (diuji dengan sqlc v1.31: blok `DO $$` pembuat trigger
+diabaikan parser tanpa error), jadi target `make sqlc-schema` / `db/sqlc/schema.sql` tidak diperlukan. Bila suatu
+migrasi kelak ditolak parser sqlc, baru tambahkan target itu (lihat Task 1.1).
 
 ## Migrasi pertama
 
@@ -21,7 +38,13 @@ impor ulang tidak pernah berbeda logika.
 # butuh PostgreSQL 15+ (NULLS NOT DISTINCT; diuji di 16), user dengan hak CREATEDB
 export PGHOST=localhost PGUSER=postgres PGPASSWORD=...
 DB=glory_pos ./migrate.sh /path/GLORY_161126.iAbu
+
+# atau di mesin dev, lewat PostgreSQL 16 di docker (client = versi server, tanpa PostgreSQL lokal):
+make migrate-legacy LEGACY_DUMP="/path/GLORY 161126.iAbu"     # DB glory_pos di localhost:55432
 ```
+
+Client `pg_dump` harus versi >= server; `reimport.sh` memakai `pg_dump`. Karena itu target `make` menjalankan
+script di dalam container `postgres:16`.
 
 Database tujuan **dihapus dan dibuat ulang**. Pakai hanya untuk database baru.
 Schema `legacy` dibiarkan untuk audit; pakai `KEEP_LEGACY=0` untuk menghapusnya.
@@ -34,6 +57,7 @@ tanpa menghapus database:
 
 ```bash
 DB=glory_pos BACKUP_DIR=/srv/glorypos-backups ./reimport.sh /path/GLORY_terbaru.iAbu
+make reimport-legacy LEGACY_DUMP=/path/GLORY_terbaru.iAbu     # mesin dev (backup DB disimpan di container)
 ```
 
 | Diperbarui dari iAbu | Tidak disentuh (milik Glory POS) |

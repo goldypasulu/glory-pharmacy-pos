@@ -55,13 +55,13 @@ Cara pakai:
 **Di luar lingkup:** endpoint bisnis, auth, Dockerfile produksi.
 
 **Kriteria**
-- [ ] `make test-db && make check` hijau dari repo bersih.
-- [ ] `sqlc generate` berhasil (langsung atau lewat `make sqlc-schema`), dan `sqlc diff` bersih.
-- [ ] Tes: `/healthz` 200; `/readyz` 200 saat DB hidup dan 503 `unavailable` saat pool ditutup.
-- [ ] Tes: handler yang panic menghasilkan 500 berformat error kontrak dengan `request_id`, server tetap hidup.
-- [ ] Tes: `testdb.New` menghasilkan database berisi semua tabel `schema.sql` + migrations, terisolasi antar tes paralel.
-- [ ] `make migrate-legacy LEGACY_DUMP=<backup>` tetap lolos 23/23 cek dan mencatat versi di `schema_migrations`.
-- [ ] `make reimport-legacy LEGACY_DUMP=<backup yang sama>` lolos 23/23 dan ringkasannya menunjukkan selisih 0.
+- [x] `make test-db && make check` hijau dari repo bersih.
+- [x] `sqlc generate` berhasil (langsung atau lewat `make sqlc-schema`), dan `sqlc diff` bersih.
+- [x] Tes: `/healthz` 200; `/readyz` 200 saat DB hidup dan 503 `unavailable` saat pool ditutup.
+- [x] Tes: handler yang panic menghasilkan 500 berformat error kontrak dengan `request_id`, server tetap hidup.
+- [x] Tes: `testdb.New` menghasilkan database berisi semua tabel `schema.sql` + migrations, terisolasi antar tes paralel.
+- [x] `make migrate-legacy LEGACY_DUMP=<backup>` tetap lolos 23/23 cek dan mencatat versi di `schema_migrations`.
+- [x] `make reimport-legacy LEGACY_DUMP=<backup yang sama>` lolos 23/23 dan ringkasannya menunjukkan selisih 0.
 
 ---
 

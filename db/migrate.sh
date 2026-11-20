@@ -49,6 +49,9 @@ SQL
 echo "==> Membuat skema Glory POS"
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$HERE/schema.sql"
 
+echo "==> Menerapkan db/migrations (schema_migrations)"
+DB="$DB" "$HERE/apply-migrations.sh"
+
 echo "==> Migrasi data"
 psql -v ON_ERROR_STOP=1 -q -d "$DB" -f "$HERE/migrate.sql"
 

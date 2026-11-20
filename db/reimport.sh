@@ -70,6 +70,9 @@ echo "==> Menyalin backup ke schema legacy_incoming di $DB"
 psql -q -d "$DB" -c "DROP SCHEMA IF EXISTS legacy_incoming CASCADE"
 pg_dump --no-owner --no-privileges -n legacy_incoming -d "$TMP_DB" | psql -q -v ON_ERROR_STOP=1 -d "$DB" >/dev/null
 
+echo "==> Menerapkan db/migrations yang belum ada (database lama mungkin tertinggal)"
+DB="$DB" "$HERE/apply-migrations.sh"
+
 echo "==> Impor ulang (satu transaksi; gagal = tidak ada yang berubah)"
 psql -v ON_ERROR_STOP=1 -v allow_older="$ALLOW_OLDER" -d "$DB" -f "$HERE/reimport.sql"
 

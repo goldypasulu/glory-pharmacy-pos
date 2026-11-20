@@ -16,7 +16,19 @@ Aturan kerja dan stack ada di `CLAUDE.md`. Mulai dari `docs/PHASE_1_TASKS.md`, T
 
 Monorepo memakai `go.work` (Go 1.24): `shared/`, `server/`, `cashier/` masing-masing punya `go.mod` sendiri.
 
+## Mulai di mesin dev
+
+Butuh Go 1.24+, Docker, dan [sqlc](https://sqlc.dev) (`brew install sqlc`). PostgreSQL lokal tidak diperlukan.
+
 ```bash
-go work sync
-go test ./shared/... ./server/... ./cashier/...
+make test-db     # PostgreSQL 16 di docker (localhost:55432) + database template tes
+make check       # gofmt + go vet + sqlc diff + go test (shared, server)
+make sqlc        # generate ulang server/internal/store setelah mengubah query atau migrasi
+
+make migrate-legacy LEGACY_DUMP="/path/GLORY 161126.iAbu"   # data iAbu ke DB glory_pos (dev)
+make run                                                   # API di :8080 memakai DB glory_pos
+curl localhost:8080/api/v1/readyz
 ```
+
+Tes integrasi memakai `TEST_DATABASE_URL` (diisi otomatis oleh Makefile). Menjalankan `go test` langsung tanpa
+variabel itu membuat tes gagal dengan petunjuk, bukan dilewati.

@@ -1,0 +1,28 @@
+# PostgreSQL 16 untuk tes dan migrasi legacy di mesin dev (bukan produksi).
+#   make test-db   -> menyalakan service ini + membuat database template glorypos_template
+# Data di tmpfs: hilang saat container dihentikan.
+# Folder db/ dipasang read-only di /glorypos/db agar script migrasi dijalankan
+# dengan client PostgreSQL 16 di dalam container (pg_dump harus >= versi server).
+name: glorypos-dev
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: Asia/Jakarta
+      PGTZ: Asia/Jakarta
+    command: ["postgres", "-c", "timezone=Asia/Jakarta", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off", "-c", "max_connections=200"]
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ../db:/glorypos/db:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
