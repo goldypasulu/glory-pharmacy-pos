@@ -45,8 +45,8 @@ func get(t *testing.T, url string) (int, http.Header, []byte) {
 	return resp.StatusCode, resp.Header, body
 }
 
-// decodeError memastikan badan respons berformat error kontrak.
-func decodeError(t *testing.T, body []byte) api.Error {
+// parseErrorBody memastikan badan respons berformat error kontrak.
+func parseErrorBody(t *testing.T, body []byte) api.Error {
 	t.Helper()
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -103,7 +103,7 @@ func TestReadyz(t *testing.T) {
 		if status != http.StatusServiceUnavailable {
 			t.Fatalf("%s saat pool ditutup: status %d: %s", path, status, body)
 		}
-		e := decodeError(t, body)
+		e := parseErrorBody(t, body)
 		if e.Code != api.CodeUnavailable || !e.Retryable {
 			t.Fatalf("%s: harap unavailable + retryable, dapat %+v", path, e)
 		}
@@ -126,7 +126,7 @@ func TestPanicBecomesContractError(t *testing.T) {
 	if ct := hdr.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
 		t.Fatalf("Content-Type %q", ct)
 	}
-	e := decodeError(t, body)
+	e := parseErrorBody(t, body)
 	if e.Code != api.CodeInternal || !e.Retryable {
 		t.Fatalf("harap internal + retryable, dapat %+v", e)
 	}
@@ -154,7 +154,7 @@ func TestNotFoundAndMethodNotAllowed(t *testing.T) {
 
 	for _, path := range []string{"/tidak-ada", "/api/v1/tidak-ada"} {
 		status, _, body := get(t, srv.URL+path)
-		if status != http.StatusNotFound || decodeError(t, body).Code != api.CodeNotFound {
+		if status != http.StatusNotFound || parseErrorBody(t, body).Code != api.CodeNotFound {
 			t.Fatalf("%s: status %d: %s", path, status, body)
 		}
 	}
@@ -165,7 +165,7 @@ func TestNotFoundAndMethodNotAllowed(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusMethodNotAllowed || decodeError(t, body).Code != api.CodeBadRequest {
+	if resp.StatusCode != http.StatusMethodNotAllowed || parseErrorBody(t, body).Code != api.CodeBadRequest {
 		t.Fatalf("POST /healthz: status %d: %s", resp.StatusCode, body)
 	}
 }

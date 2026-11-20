@@ -15,7 +15,10 @@ import (
 
 type ctxKey int
 
-const requestIDKey ctxKey = iota
+const (
+	requestIDKey ctxKey = iota
+	stateKey
+)
 
 // RequestIDHeader dikirim di setiap respons agar keluhan pengguna bisa dicocokkan dengan log.
 const RequestIDHeader = "X-Request-Id"
@@ -24,6 +27,44 @@ const RequestIDHeader = "X-Request-Id"
 func RequestID(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey).(string)
 	return id
+}
+
+// requestState dibagi middleware dan penulis respons selama satu permintaan.
+type requestState struct {
+	log       *slog.Logger
+	errorCode string // kode error kontrak yang dikirim, untuk log akses
+}
+
+func stateFrom(ctx context.Context) *requestState {
+	st, _ := ctx.Value(stateKey).(*requestState)
+	return st
+}
+
+// NewLogHandler membungkus h agar setiap log yang memakai konteks permintaan
+// (log.InfoContext(ctx, ...)) otomatis membawa request_id. Dipasang sekali di main;
+// service tidak perlu menambah request_id sendiri.
+func NewLogHandler(h slog.Handler) slog.Handler {
+	if _, ok := h.(logHandler); ok {
+		return h
+	}
+	return logHandler{h}
+}
+
+type logHandler struct{ slog.Handler }
+
+func (h logHandler) Handle(ctx context.Context, rec slog.Record) error {
+	if id := RequestID(ctx); id != "" {
+		rec.AddAttrs(slog.String("request_id", id))
+	}
+	return h.Handler.Handle(ctx, rec)
+}
+
+func (h logHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return logHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h logHandler) WithGroup(name string) slog.Handler {
+	return logHandler{h.Handler.WithGroup(name)}
 }
 
 // requestID memberi setiap permintaan UUIDv7 baru. Header dari klien tidak
@@ -43,11 +84,14 @@ var quietPaths = map[string]bool{
 }
 
 // requestLogger mencatat satu baris slog per permintaan setelah selesai.
+// Query string, header, dan badan sengaja tidak dicatat (password, token).
 func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
+			st := &requestState{log: log}
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			r = r.WithContext(context.WithValue(r.Context(), stateKey, st))
 			next.ServeHTTP(ww, r)
 
 			status := ww.Status()
@@ -58,17 +102,22 @@ func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
 			switch {
 			case status >= 500:
 				level = slog.LevelError
+			case status >= 400:
+				level = slog.LevelWarn
 			case quietPaths[r.URL.Path]:
 				level = slog.LevelDebug
 			}
-			log.LogAttrs(r.Context(), level, "http",
+			attrs := []slog.Attr{
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", status),
 				slog.Int("bytes", ww.BytesWritten()),
 				slog.Duration("duration", time.Since(start)),
-				slog.String("request_id", RequestID(r.Context())),
-			)
+			}
+			if st.errorCode != "" {
+				attrs = append(attrs, slog.String("error_code", st.errorCode))
+			}
+			log.LogAttrs(r.Context(), level, "http", attrs...)
 		})
 	}
 }
@@ -91,10 +140,8 @@ func recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 					"stack", string(debug.Stack()),
 					"method", r.Method,
 					"path", r.URL.Path,
-					"request_id", RequestID(r.Context()),
 				)
-				// Bila header sudah terkirim, respons tidak bisa diganti lagi.
-				if ww, ok := w.(middleware.WrapResponseWriter); ok && ww.Status() != 0 {
+				if headerWritten(w) {
 					return
 				}
 				WriteError(w, r, http.StatusInternalServerError, api.CodeInternal, "Terjadi kesalahan di server")
@@ -105,7 +152,7 @@ func recoverer(log *slog.Logger) func(http.Handler) http.Handler {
 }
 
 // timeout membatasi umur konteks permintaan. Query DB dan pekerjaan lain yang
-// menghormati konteks akan berhenti saat batas tercapai.
+// menghormati konteks akan berhenti saat batas tercapai (Fail mengirim 503).
 func timeout(d time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

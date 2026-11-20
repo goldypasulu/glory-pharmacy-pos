@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"glorypos/server/internal/apperr"
 	"glorypos/shared/api"
 )
 
@@ -32,6 +33,8 @@ func NewRouter(d Deps) *chi.Mux {
 	if d.RequestTimeout == 0 {
 		d.RequestTimeout = 30 * time.Second
 	}
+	// Pastikan setiap log berkonteks permintaan membawa request_id.
+	d.Log = slog.New(NewLogHandler(d.Log.Handler()))
 	r := chi.NewRouter()
 	r.Use(requestID, requestLogger(d.Log), recoverer(d.Log), timeout(d.RequestTimeout))
 	r.NotFound(notFound)
@@ -39,7 +42,7 @@ func NewRouter(d Deps) *chi.Mux {
 
 	health := func(r chi.Router) {
 		r.Get("/healthz", handleHealthz)
-		r.Get("/readyz", handleReadyz(d.DB, d.Log))
+		r.Method(http.MethodGet, "/readyz", handleReadyz(d.DB))
 	}
 	health(r)
 	r.Route("/api/v1", func(r chi.Router) {
@@ -53,18 +56,18 @@ type statusResponse struct {
 }
 
 func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, r, http.StatusOK, statusResponse{Status: "ok"})
+	WriteJSON(w, r, http.StatusOK, statusResponse{Status: "ok"})
 }
 
-func handleReadyz(db Pinger, log *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func handleReadyz(db Pinger) HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
-			log.WarnContext(r.Context(), "readyz: database tidak siap", "err", err, "request_id", RequestID(r.Context()))
-			WriteError(w, r, http.StatusServiceUnavailable, api.CodeUnavailable, "Database belum siap")
-			return
+			// Selalu unavailable (bukan internal) apa pun penyebabnya; Fail mencatatnya di level Warn.
+			return &apperr.Error{Code: api.CodeUnavailable, Message: "Database belum siap", Cause: err}
 		}
-		writeJSON(w, r, http.StatusOK, statusResponse{Status: "ready"})
+		WriteJSON(w, r, http.StatusOK, statusResponse{Status: "ready"})
+		return nil
 	}
 }

@@ -118,6 +118,12 @@ Aksi sensitif (void, ubah harga, finalisasi opname, reset password) wajib menuli
 - Tes integrasi memakai PostgreSQL nyata (`TEST_DATABASE_URL`, disiapkan `make test-db`); tiap tes membuat database
   dari template berisi `schema.sql` + migrations. Jangan mock database untuk logika stok atau sync.
 - Error dibungkus `fmt.Errorf("...: %w", err)`; handler tidak boleh panic; respons error mengikuti `docs/API_CONTRACT.md`.
+- **Alur error:** service mengembalikan `*apperr.Error` (`apperr.Validation`, `apperr.BusinessRule`, `apperr.New(code, ...)`)
+  untuk kegagalan yang ditujukan ke klien; error lain (DB, bug) dikembalikan apa adanya. Handler bertipe
+  `httpapi.HandlerFunc` dan cukup `return err`: `httpapi.Fail` memetakan kode ke status, mencatat penyebab 5xx, dan
+  tidak pernah mengirim pesan internal ke klien. Jangan menulis JSON error sendiri. Badan permintaan dibaca dengan
+  `httpapi.DecodeJSON`. Log memakai `log.InfoContext(ctx, ...)` agar `request_id` ikut otomatis; jangan mencatat
+  password, PIN, token, atau badan permintaan.
 - Komentar kode dan pesan commit boleh bahasa Indonesia. Pesan commit: `task 1.3: engine FIFO dan defisit`.
 
 ## Verifikasi (tersedia setelah Task 1.1)
@@ -125,7 +131,7 @@ Aksi sensitif (void, ubah harga, finalisasi opname, reset password) wajib menuli
 Jangan anggap task selesai sebelum semua perintah yang relevan lulus tanpa error:
 
 ```bash
-make check        # = gofmt -l (harus kosong) + go vet + sqlc diff + go test -count=1 untuk shared dan server
+make check        # = gofmt -l (harus kosong) + go vet + sqlc diff + go test -race -count=1 (shared, server) + tes script db/
 make test-db      # menyalakan PostgreSQL tes di docker (port 55432) dan menyiapkan database template
 make migrate-legacy LEGACY_DUMP=/path/backup.iAbu   # opsional: migrasi iAbu pertama + validasi 23 cek
 make reimport-legacy LEGACY_DUMP=/path/backup.iAbu  # opsional: impor ulang ke DB yang sudah ada + validasi

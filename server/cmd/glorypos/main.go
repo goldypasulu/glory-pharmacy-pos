@@ -86,10 +86,12 @@ func serve(args []string, stderr io.Writer) int {
 
 func newLogger(cfg config.Config, w io.Writer) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
+	var h slog.Handler = slog.NewTextHandler(w, opts)
 	if cfg.Env == config.EnvProd {
-		return slog.New(slog.NewJSONHandler(w, opts))
+		h = slog.NewJSONHandler(w, opts)
 	}
-	return slog.New(slog.NewTextHandler(w, opts))
+	// Log yang memakai konteks permintaan otomatis membawa request_id.
+	return slog.New(httpapi.NewLogHandler(h))
 }
 
 func runServer(ctx context.Context, cfg config.Config, log *slog.Logger) error {

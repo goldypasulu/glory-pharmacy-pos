@@ -44,12 +44,19 @@ if ! applied "$BASELINE"; then
 fi
 
 shopt -s nullglob
-for f in "$HERE"/migrations/*.sql; do
+FILES=("$HERE"/migrations/*.sql)
+
+# Semua nama diperiksa dulu agar file salah tidak membuat migrasi berhenti di tengah jalan.
+for f in ${FILES[@]+"${FILES[@]}"}; do
   name="$(basename "$f")"
   if [[ ! "$name" =~ ^[0-9]{5}_[a-z0-9_]+\.sql$ ]]; then
-    echo "Nama file migrasi tidak valid: $name (format NNNNN_deskripsi.sql)" >&2
+    echo "Nama file migrasi tidak valid: $name (format NNNNN_deskripsi.sql). Tidak ada migrasi yang dijalankan." >&2
     exit 1
   fi
+done
+
+for f in ${FILES[@]+"${FILES[@]}"}; do
+  name="$(basename "$f")"
   version="${name%.sql}"
   applied "$version" && continue
   echo "==> $version"

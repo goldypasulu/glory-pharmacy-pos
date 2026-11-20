@@ -18,7 +18,7 @@ LEGACY_DB ?= glory_pos
 GLORYPOS_DATABASE_URL ?= postgres://postgres:postgres@localhost:55432/$(LEGACY_DB)?sslmode=disable
 GLORYPOS_JWT_SECRET   ?= dev-only-jangan-dipakai-di-produksi
 
-.PHONY: fmt vet sqlc test test-db test-db-up test-db-down check run migrate-legacy reimport-legacy require-dump
+.PHONY: fmt vet sqlc test test-scripts test-db test-db-up test-db-down check run migrate-legacy reimport-legacy require-dump
 
 fmt:
 	gofmt -w $(GO_DIRS)
@@ -29,14 +29,20 @@ vet:
 sqlc:
 	cd server && sqlc generate
 
+# -race: tes konkurensi (posting bersamaan, sync) wajib bebas data race.
 test:
-	go test -count=1 $(GO_PKGS)
+	go test -race -count=1 $(GO_PKGS)
+
+# Tes script db/*.sh, dijalankan di container PostgreSQL dev (butuh `make test-db`).
+test-scripts:
+	$(PG_EXEC) /glorypos/db/tests/apply-migrations.test.sh
 
 check:
 	@out="$$(gofmt -l $(GO_DIRS))"; if [ -n "$$out" ]; then echo "gofmt belum dijalankan (make fmt):"; echo "$$out"; exit 1; fi
 	go vet $(GO_PKGS)
 	cd server && sqlc diff
-	go test -count=1 $(GO_PKGS)
+	go test -race -count=1 $(GO_PKGS)
+	$(MAKE) --no-print-directory test-scripts
 
 test-db-up:
 	$(COMPOSE_DEV) up -d --wait db

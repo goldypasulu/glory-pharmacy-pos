@@ -1,0 +1,42 @@
+# Menjalankan pemeriksaan yang sama dengan lokal: make test-db && make check.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            server/go.sum
+            go.work.sum
+
+      # Versi harus sama dengan yang dipakai saat generate (header file sqlc), kalau tidak sqlc diff gagal.
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: "1.31.1"
+
+      - name: PostgreSQL 16 + template tes
+        run: make test-db
+
+      - name: make check
+        run: make check
+
+      - name: Log PostgreSQL bila gagal
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml logs db
